@@ -1,0 +1,221 @@
+CLASE SERVIDOR
+import java.io.IOException;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+
+public class Servidor {
+    
+    Hilo hm;
+
+    public Servidor(){
+        try {
+            ServerSocket server = new ServerSocket(1234);
+            System.out.println("Servidor encendido y escuchando en el puerto 1234");
+            System.out.println("Servidor a la espera de clientes");
+            hm=new Hilo();
+            hm.start();
+            while(true){
+                Socket cliente=server.accept();
+                hm.AgregarCliente(cliente);
+            }
+        } catch (IOException ex) {
+            Logger.getLogger(Servidor.class.getName()).log(Level.SEVERE, null, ex);
+        }
+
+
+    }
+
+
+    public static void main(String arg[]){
+        Servidor servidor = new Servidor();
+    }
+    
+}
+
+
+CLASE HILO
+import java.net.Socket;
+import java.util.ArrayList;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+
+public class Hilo {
+    
+    Socket clienteA=null;
+    Socket clienteB=null;
+    ArrayList<Socket> clientesespera;
+    int cont=0;
+    boolean swbd1=false;
+    
+
+    public Hilo(){
+
+        clientesespera=new ArrayList<>();
+
+    }
+
+    public void run(){
+        while(true){
+            if(cont<clientesespera.size()){
+                if(swbd1==false){
+                    Cliente c=new Cliente(clientesespera.get(cont),1,this);
+                    c.start();
+                    swbd1=true;
+                }/*else{
+                    if(swbd2==false){
+                        Cliente c=new Cliente(clientesespera.get(cont),2,this);
+                        c.start();
+                        swbd2=true;
+                    }*/else{
+                        System.out.println("Base de datos ocupada, por favor espere a que un proceso se desocupe" );
+                        cont--;
+                        try {
+                            Thread.sleep(1000);
+                        } catch (InterruptedException ex) {
+                            Logger.getLogger(Hilo.class.getName()).log(Level.SEVERE, null, ex);
+                        }
+                    }
+                }
+                cont++;
+            }
+        }
+
+    void start() {
+        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    }
+
+    void AgregarCliente(Socket cliente) {
+        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    }
+    }
+
+
+CLASE CLIENTE
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.net.Socket;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+
+public class Cliente extends Thread {
+        Conexion c;
+    int tipo=-1;
+    String consulta="";
+    int basedatos=-1;
+    Hilo hm;
+    DataInputStream dis = null;
+    DataOutputStream dos=null;
+
+    public Cliente(Socket s,int bd,Hilo hilom){
+        
+        try {
+            c = new Conexion();
+            dis = new DataInputStream(s.getInputStream());
+            dos=new DataOutputStream(s.getOutputStream());
+            int t = dis.readInt();
+            String con = dis.readUTF();
+            tipo = t;
+            consulta = con;
+            basedatos = bd;
+            hm = hilom;
+            if (basedatos == 1) {
+                hm.swbd1 = true;
+                System.out.println("Cliente Conectado a Base de Datos ");
+            }
+            
+            
+        } catch (IOException ex) {
+            Logger.getLogger(Cliente.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+
+    @Override
+    public void run(){
+        try {
+            String datos;
+            if (tipo == 1) {
+                c.InsertarUsuario(consulta,basedatos);
+                dos.writeBoolean(true);
+            }
+            if (tipo == 2) {
+                datos=c.ConsultarDatos(consulta,basedatos);
+                dos.writeUTF(datos);
+            }
+            Thread.sleep(4000);
+            if(basedatos==1){
+                hm.swbd1=false;
+            }
+           
+            System.out.println("Se termino la transaccion, Cliente Desconectado");
+        } catch (IOException | InterruptedException ex) {
+            Logger.getLogger(Cliente.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+
+    
+    
+}
+
+CLASE CONEXIÓN
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+
+public class Conexion {
+    public Connection getConexion(int bd){
+        Connection conexion=null;
+        try {
+            Class.forName("com.mysql.jdbc.Driver");
+            if(bd==1){
+                conexion = DriverManager.getConnection("jdbc:mysql://localhost/carlos", "root", "1234");
+            }
+            /*if(bd==2){
+                conexion = DriverManager.getConnection("jdbc:mysql://localhost/parcialfinal2", "root", "1234");
+            }*/
+        } catch (SQLException | ClassNotFoundException ex) {
+            Logger.getLogger(Conexion.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        return conexion;
+    }
+
+    public boolean InsertarUsuario(String consulta,int bd){
+        boolean sw=false;
+        try {
+            try (Connection con = getConexion(bd); java.sql.Statement st = con.createStatement()) {
+                st.executeUpdate(""+consulta);
+            }
+        } catch (SQLException ex) {
+            Logger.getLogger(Conexion.class.getName()).log(Level.SEVERE, null, ex);
+            sw=false;
+        }
+        return sw;
+    }
+
+    public String ConsultarDatos(String consulta,int bd){
+        String datos="";
+        try {
+            Connection con = getConexion(bd);
+            try (java.sql.Statement st = con.createStatement()) {
+                ResultSet rs=st.executeQuery(""+consulta);
+                while(rs.next()){
+                    datos+=""+rs.getString(1);
+                }
+            }
+        } catch (SQLException ex) {
+            Logger.getLogger(Conexion.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        return datos;
+    }
+    
+}
+
